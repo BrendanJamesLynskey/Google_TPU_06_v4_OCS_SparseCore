@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google TPUs 06 &mdash; TPU v4: OCS, SparseCore &amp; Palomar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg-primary:#0a0a0a; --bg-card:#0d1117; --bg-code:#161b22; --text-primary:#e6edf3; --text-secondary:#8b949e; --accent:#4285F4; --accent-dim:#4285F444; --accent-glow:#4285F433; --accent-2:#EA4335; --accent-3:#FBBC04; --accent-4:#34A853; --border:#21262d; --font-display:'Space Grotesk',sans-serif; --font-mono:'JetBrains Mono','Fira Code',monospace; --font-body:'Inter',sans-serif; --max-width:900px; }
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+        html { scroll-behavior:smooth; }
+        body { background:var(--bg-primary); color:var(--text-primary); font-family:var(--font-body); font-size:17px; line-height:1.7; overflow-x:hidden; }
+        .hero { min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:2rem 1.5rem; text-align:center; position:relative; }
+        .hero::before { content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:700px; height:600px; background:radial-gradient(circle,var(--accent-glow) 0%,transparent 70%); pointer-events:none; z-index:0; }
+        .hero > * { position:relative; z-index:1; }
+        .series-label { font-family:var(--font-mono); font-size:0.85rem; color:var(--accent); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:1rem; }
+        .hero h1 { font-family:var(--font-display); font-size:clamp(2rem,5vw,3.2rem); font-weight:700; line-height:1.2; margin-bottom:1rem; }
+        .hero h1 .accent { color:var(--accent); }
+        .hero .subtitle { font-size:1.1rem; color:var(--text-secondary); max-width:640px; margin-bottom:2rem; }
+        .tags { display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center; margin-bottom:2.5rem; }
+        .tag { font-family:var(--font-mono); font-size:0.75rem; padding:0.25rem 0.75rem; border-radius:999px; border:1px solid var(--accent); color:var(--accent); background:var(--accent-dim); }
+        .pipeline { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:0.25rem; margin-bottom:1rem; max-width:var(--max-width); }
+        .pipeline-step { font-family:var(--font-mono); font-size:0.7rem; padding:0.3rem 0.7rem; background:var(--bg-card); border:1px solid var(--border); border-radius:4px; color:var(--text-secondary); }
+        .pipeline-arrow { color:var(--accent); font-size:0.9rem; font-weight:700; }
+        .slide { min-height:100vh; max-width:var(--max-width); margin:0 auto; padding:4rem 1.5rem; position:relative; display:flex; flex-direction:column; justify-content:center; }
+        .slide-number { font-family:var(--font-display); font-size:5rem; font-weight:700; color:var(--accent-dim); position:absolute; top:2rem; right:1.5rem; line-height:1; }
+        .slide h2 { font-family:var(--font-display); font-size:1.9rem; font-weight:700; color:var(--accent); margin-bottom:1.5rem; line-height:1.25; }
+        .slide h3 { font-family:var(--font-display); font-size:1.3rem; font-weight:600; color:var(--text-primary); margin-top:1.5rem; margin-bottom:0.75rem; }
+        .slide p { margin-bottom:1rem; color:var(--text-secondary); }
+        .slide p strong { color:var(--text-primary); }
+        .slide ul, .slide ol { margin-bottom:1rem; padding-left:1.5rem; color:var(--text-secondary); }
+        .slide li { margin-bottom:0.4rem; }
+        .slide li strong { color:var(--text-primary); }
+        .table-wrap { overflow-x:auto; margin:1.25rem 0; border-radius:8px; border:1px solid var(--border); }
+        table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+        th { background:var(--bg-code); color:var(--accent); font-weight:600; text-align:left; padding:0.75rem 1rem; border-bottom:1px solid var(--border); font-family:var(--font-display); white-space:nowrap; }
+        td { padding:0.6rem 1rem; border-bottom:1px solid var(--border); color:var(--text-secondary); vertical-align:top; }
+        tr:last-child td { border-bottom:none; }
+        tr:nth-child(even) td { background:rgba(13,17,23,0.5); }
+        .diagram-grid { display:grid; gap:0.75rem; margin:1.5rem 0; padding:1.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; }
+        .diagram-grid.cols-2 { grid-template-columns:1fr 1fr; }
+        .diagram-grid.cols-3 { grid-template-columns:1fr 1fr 1fr; }
+        .diagram-panel { padding:1rem; background:var(--bg-code); border:1px solid var(--border); border-radius:6px; }
+        .diagram-panel.accent-border { border-left:3px solid var(--accent); }
+        .diagram-panel.r { border-left:3px solid var(--accent-2); }
+        .diagram-panel.y { border-left:3px solid var(--accent-3); }
+        .diagram-panel.g { border-left:3px solid var(--accent-4); }
+        .diagram-panel h4 { font-family:var(--font-display); font-size:1rem; color:var(--accent); margin-bottom:0.5rem; }
+        .diagram-panel.r h4 { color:var(--accent-2); }
+        .diagram-panel.y h4 { color:var(--accent-3); }
+        .diagram-panel.g h4 { color:var(--accent-4); }
+        .diagram-panel p, .diagram-panel ul { font-size:0.9rem; }
+        .callout { background:var(--bg-card); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:1rem 1.25rem; margin:1.25rem 0; }
+        .callout p { margin-bottom:0; }
+        .callout .callout-label { font-family:var(--font-mono); font-size:0.75rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.3rem; }
+        .canvas-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:1.25rem 0; overflow-x:auto; }
+        .canvas-wrap canvas, .canvas-wrap svg { display:block; margin:0 auto; max-width:100%; }
+        .quote { font-family:var(--font-display); font-size:1.05rem; font-style:italic; color:var(--text-primary); padding:1rem 1.5rem; border-left:3px solid var(--accent); background:var(--bg-card); margin:1.25rem 0; border-radius:0 8px 8px 0; }
+        .quote .attr { display:block; margin-top:0.5rem; font-style:normal; font-size:0.85rem; color:var(--text-secondary); font-family:var(--font-mono); }
+        .contents-list { list-style:none; padding-left:0; counter-reset:contents; }
+        .contents-list li { counter-increment:contents; padding:0.6rem 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:1rem; }
+        .contents-list li:last-child { border-bottom:none; }
+        .contents-list li::before { content:counter(contents,decimal-leading-zero); font-family:var(--font-mono); font-size:0.85rem; color:var(--accent); min-width:2rem; }
+        .contents-list a { color:var(--text-primary); text-decoration:none; }
+        .contents-list a:hover { color:var(--accent); }
+        .footer { text-align:center; padding:3rem 1.5rem; color:var(--text-secondary); font-size:0.85rem; border-top:1px solid var(--border); max-width:var(--max-width); margin:0 auto; }
+        .footer a { color:var(--accent); text-decoration:none; }
+        @media (max-width:640px) { .slide { padding:3rem 1rem; min-height:auto; } .slide-number { font-size:3rem; top:1.5rem; right:1rem; } .slide h2 { font-size:1.5rem; } .diagram-grid.cols-2,.diagram-grid.cols-3 { grid-template-columns:1fr; } .hero h1 { font-size:1.8rem; } table { font-size:0.78rem; } }
+    </style>
+</head>
+<body>
+
+<header class="hero">
+    <div class="series-label">Google TPUs Series &mdash; Presentation 06</div>
+    <h1>TPU <span class="accent">v4</span> &mdash; OCS, SparseCore &amp; Palomar</h1>
+    <p class="subtitle">7&nbsp;nm. 4096 chips per pod. 3D torus reconfigured by optical circuit switches. An on-die accelerator just for embedding lookups. The chip that trained PaLM, the first true ML supercomputer.</p>
+    <div class="tags">
+        <span class="tag">7 nm</span><span class="tag">3D torus</span>
+        <span class="tag">Palomar OCS</span><span class="tag">SparseCore</span>
+        <span class="tag">CMEM</span><span class="tag">v4i (inference)</span>
+        <span class="tag">PaLM 540B</span>
+    </div>
+    <div class="pipeline">
+        <span class="pipeline-step">7 nm shrink</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">+CMEM</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">+SparseCore</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">+6 ICI links</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">3D torus</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Palomar OCS</span><span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">4096-chip pod</span>
+    </div>
+</header>
+
+<section class="slide" id="slide-00">
+    <div class="slide-number">00</div>
+    <h2>Topics We'll Cover</h2>
+    <ul class="contents-list">
+        <li><a href="#slide-01">Why v3 Hit a Wall</a></li>
+        <li><a href="#slide-02">v4 Per-Chip Spec</a></li>
+        <li><a href="#slide-03">CMEM &mdash; The On-Die Cache</a></li>
+        <li><a href="#slide-04">SparseCore &mdash; Embeddings in Hardware</a></li>
+        <li><a href="#slide-05">Six ICI Links &mdash; The 3D Torus</a></li>
+        <li><a href="#slide-06">Palomar &mdash; The Optical Circuit Switch</a></li>
+        <li><a href="#slide-07">A 4096-Chip Pod, Logically</a></li>
+        <li><a href="#slide-08">v4i &mdash; The Inference Sibling</a></li>
+        <li><a href="#slide-09">PaLM &mdash; 6,144 Chips, 50 Days</a></li>
+        <li><a href="#slide-10">Resiliency at Scale</a></li>
+        <li><a href="#slide-11">v4 Numbers In One Page</a></li>
+        <li><a href="#slide-12">Cheat Sheet</a></li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-01">
+    <div class="slide-number">01</div>
+    <h2>Why v3 Hit a Wall</h2>
+    <p>By 2019 v3 was running every interesting workload at Google at scale &mdash; and the team had a list of complaints from the inside. The v4 design (deployed 2020, announced May 2021, paper June 2023) is a point-by-point response.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel r">
+            <h4>v3 pain points</h4>
+            <ul>
+                <li><strong>2D torus diameter.</strong> A 32&times;32 torus has diameter 32 hops. Latency for cross-pod all-reduce on a 1024-chip pod was already painful.</li>
+                <li><strong>Pod is rigid.</strong> 1024 chips, take it or leave it. No sub-pod slices. No way to allocate "5,000 chips" jobs.</li>
+                <li><strong>One bad chip kills the pod.</strong> No mechanism to route around a faulty board.</li>
+                <li><strong>Embedding lookups are slow.</strong> On the vector unit, scatter-gather over 100M-row embedding tables is bandwidth-bound and latency-bound.</li>
+                <li><strong>HBM-only memory hierarchy.</strong> Activations spill direct to HBM; KV-cache-like patterns waste bandwidth.</li>
+                <li><strong>Still on 16 nm.</strong> By 2020 a 7&nbsp;nm shrink is two nodes overdue.</li>
+            </ul>
+        </div>
+        <div class="diagram-panel g">
+            <h4>v4 architectural answer</h4>
+            <ul>
+                <li><strong>3D torus + OCS</strong> &rarr; reconfigurable, sliceable, lower diameter, fault-tolerant.</li>
+                <li><strong>SparseCore</strong> &rarr; dedicated embedding accelerator on-die.</li>
+                <li><strong>CMEM</strong> &rarr; large on-die SRAM cache between MXU and HBM.</li>
+                <li><strong>7&nbsp;nm</strong> &rarr; 2&times; more transistors per mm&sup2;.</li>
+                <li><strong>v4i</strong> as a sibling chip &rarr; inference-only, drops the most expensive pieces.</li>
+            </ul>
+        </div>
+    </div>
+
+    <p>The CACM 2023 paper opens with the statement that v4 is "approximately 2.1&times; the per-chip performance of v3 and 2.7&times; better perf/W". The pod-level numbers are much larger because the 4096-chip pod is 4&times; the 1024-chip v3 pod.</p>
+</section>
+
+<section class="slide" id="slide-02">
+    <div class="slide-number">02</div>
+    <h2>v4 Per-Chip Spec</h2>
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr><td><strong>Process</strong></td><td>TSMC 7&nbsp;nm</td></tr>
+                <tr><td><strong>Die size</strong></td><td>&lt;400 mm&sup2;</td></tr>
+                <tr><td><strong>TensorCores per chip</strong></td><td>2</td></tr>
+                <tr><td><strong>MXUs per TensorCore</strong></td><td>4 (8 per chip total)</td></tr>
+                <tr><td><strong>MXU dim</strong></td><td>128&times;128 bf16</td></tr>
+                <tr><td><strong>Numeric formats</strong></td><td>bf16 (multiply) + FP32 (accumulate); INT8 supported</td></tr>
+                <tr><td><strong>Per-chip bf16 peak</strong></td><td>275 TFLOPS</td></tr>
+                <tr><td><strong>Clock</strong></td><td>~1050 MHz</td></tr>
+                <tr><td><strong>HBM</strong></td><td>32 GiB HBM2 at 1.2 TB/s</td></tr>
+                <tr><td><strong>CMEM</strong></td><td>~128 MiB on-die (shared between cores)</td></tr>
+                <tr><td><strong>SparseCore</strong></td><td>One per chip; embedding-lookup accelerator</td></tr>
+                <tr><td><strong>ICI links per chip</strong></td><td>6 (enables 3D torus)</td></tr>
+                <tr><td><strong>Per-link ICI BW</strong></td><td>~50 GB/s</td></tr>
+                <tr><td><strong>TDP</strong></td><td>~170 W</td></tr>
+                <tr><td><strong>Cooling</strong></td><td>Liquid (cold-plate)</td></tr>
+                <tr><td><strong>Pod size</strong></td><td>4,096 chips (3D torus, 4&times;4&times;4 of 8&times;8&times;8 cubes)</td></tr>
+                <tr><td><strong>Pod aggregate</strong></td><td>~1.1 ExaFLOPS bf16</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p>Note the per-chip compute uplift vs v3: 275 / 123 = 2.24&times;. That comes from a 2&times; MXU count (4 vs 2 per core), a clock bump (1.05 GHz vs ~940 MHz), and pipeline-utilisation improvements. Combined with the 4&times; pod scale-up, the pod is roughly 9&times; v3.</p>
+</section>
+
+<section class="slide" id="slide-03">
+    <div class="slide-number">03</div>
+    <h2>CMEM &mdash; The On-Die Cache</h2>
+    <p>v4 (and especially v4i) introduce <strong>CMEM</strong>: a large on-die SRAM, shared between the two TensorCores, sitting between the per-core VMEM and HBM. The first TPU memory level that's a <em>cache</em> rather than a software-managed scratchpad &mdash; though XLA still manages residency explicitly.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>The hierarchy on v4</h4>
+            <ul>
+                <li><strong>Registers / accumulators</strong> &mdash; per-PE.</li>
+                <li><strong>VMEM</strong> &mdash; ~32 MiB per TensorCore. Software-managed.</li>
+                <li><strong>CMEM</strong> &mdash; ~128 MiB shared across the chip. XLA-managed residency.</li>
+                <li><strong>HBM</strong> &mdash; 32 GiB at 1.2 TB/s.</li>
+                <li><strong>Remote HBM</strong> &mdash; via ICI from a neighbouring chip (~50 GB/s per link).</li>
+            </ul>
+        </div>
+        <div class="diagram-panel y">
+            <h4>What CMEM actually buys</h4>
+            <ul>
+                <li><strong>KV cache hit rates.</strong> Long-context inference reuses the same KVs many times; CMEM keeps them on-die.</li>
+                <li><strong>Activation re-use.</strong> For backprop, activations stored in CMEM avoid the HBM round-trip.</li>
+                <li><strong>Fused attention.</strong> Q, K, V tiles staged in CMEM let the MXU run flash-attention-style fused kernels without spilling.</li>
+                <li><strong>Effective HBM bandwidth boost.</strong> Each CMEM hit saves an HBM read; with good locality, effective bandwidth is ~2&times; the raw 1.2 TB/s.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Why this is "v4i's contribution"</div>
+        <p>The v4i ISCA 2021 paper introduces CMEM ahead of the v4 paper. It's listed as one of "Ten Lessons" from v1&ndash;v3. The pattern is interesting: <strong>ML chips have moved from scratchpad-only (v1&ndash;v3) toward small explicit caches (v4 onward)</strong>. The TPU is approaching the GPU memory model from below, while GPUs (with HBM-on-package and more programmable cache management) approach from above.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-04">
+    <div class="slide-number">04</div>
+    <h2>SparseCore &mdash; Embeddings in Hardware</h2>
+    <p>The other v4 first. Recommendation models (DLRM, ranking models, ad CTR predictors) are <em>not</em> matmul-bound &mdash; they spend most of their time looking up entries in giant embedding tables (billions of rows, thousands of features, irregular access patterns) and then summing the results.</p>
+
+    <h3>What the workload looks like</h3>
+    <ol>
+        <li>For each input feature <em>i</em>, look up <em>k</em> rows of an embedding table <em>E<sub>i</sub></em> (each row is a bf16 vector of size 32&ndash;512).</li>
+        <li>Apply a pooling reduction (sum, mean, max) over the <em>k</em> rows.</li>
+        <li>Concatenate the pooled vectors across features.</li>
+        <li>Feed the result into a dense MLP (which is matmul, fine for the MXU).</li>
+    </ol>
+
+    <p>Steps 1&ndash;3 are scatter-gather + reduction, with random access patterns and small sub-vector reductions. The MXU is useless for them; the vector unit runs them but is bandwidth-bound. The CACM v4 paper says these workloads spent ~50% of training time in embedding ops on v3.</p>
+
+    <h3>SparseCore's hardware</h3>
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel g">
+            <h4>What's on the die</h4>
+            <ul>
+                <li>Dataflow accelerator with hardware gather, hardware scatter-reduce, and atomic accumulate.</li>
+                <li>Direct path to HBM separate from the MXU's path.</li>
+                <li>Optimised address-translation hardware for the giant table indices (often 64-bit IDs into 100M-row tables).</li>
+                <li>~5% of die area, ~5% of die power.</li>
+            </ul>
+        </div>
+        <div class="diagram-panel y">
+            <h4>What it delivers</h4>
+            <ul>
+                <li><strong>5&ndash;7&times; speedup</strong> on DLRM-class models vs running embeddings on the vector unit (Google's claim).</li>
+                <li>Frees the MXU and vector unit for the dense MLP, so total throughput improves further.</li>
+                <li>Matters for ad ranking, YouTube recommendations, and Search ranking &mdash; all fleet-dominant workloads.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Why this matters in 2026</div>
+        <p>Modern frontier MoE models (e.g. Mixture-of-Experts at scale) have a similar shape: each token is routed to a small number of experts, requiring scatter-gather over a giant set of expert weights. SparseCore was originally for recommendations but is increasingly load-bearing for MoE inference. Trillium ships with a <strong>3rd-generation SparseCore</strong>; Ironwood inherits a refined version. It's permanent.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-05">
+    <div class="slide-number">05</div>
+    <h2>Six ICI Links &mdash; The 3D Torus</h2>
+    <p>v2/v3 chips had 4 ICI links (2D torus). v4 has 6, enabling a 3D torus where each chip has neighbours in &plusmn;X, &plusmn;Y, &plusmn;Z.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Why 3D over 2D?</h4>
+            <ul>
+                <li><strong>Diameter scales as N<sup>1/3</sup> not N<sup>1/2</sup>.</strong> For 4096 chips, 3D torus diameter is ~24 hops; a 2D torus would be ~64.</li>
+                <li><strong>Bisection bandwidth.</strong> Higher in 3D; all-reduce times improve roughly proportionally.</li>
+                <li><strong>Tensor-parallel friendly.</strong> A 3D shape lets you natively allocate 3D sharding for tensor / data / pipeline parallelism without packing tricks.</li>
+            </ul>
+        </div>
+        <div class="diagram-panel y">
+            <h4>Why not 4D / 5D / hypercube?</h4>
+            <ul>
+                <li><strong>Cabling cost.</strong> Each extra dimension means more ICI links per chip and more cables per board / rack.</li>
+                <li><strong>Diminishing returns.</strong> Going from 2D to 3D buys you a lot; 3D to 4D buys much less.</li>
+                <li><strong>Datacenter physics.</strong> A datacenter is a 2D plane of racks, with vertical (rack) being short. 3D maps onto it cleanly; 4D doesn't.</li>
+            </ul>
+        </div>
+    </div>
+
+    <p>Per-link bandwidth is ~50 GB/s in each direction; aggregate ICI bandwidth per chip is ~300 GB/s. The 3D-torus's 6 links per chip is the same number as in v5p and Ironwood; <strong>the 3D-torus is the p-class topology from v4 onwards</strong>.</p>
+</section>
+
+<section class="slide" id="slide-06">
+    <div class="slide-number">06</div>
+    <h2>Palomar &mdash; The Optical Circuit Switch</h2>
+    <p>The single most distinctive component of v4 is not on the TPU itself &mdash; it's in the rack between TPU sub-pods. <strong>Palomar</strong> is Google's bespoke 3D-MEMS optical circuit switch.</p>
+
+    <div class="quote">
+        Each Palomar OCS is a 136-port (128 + 8 spares) reconfigurable optical switch using 3D-MEMS mirrors, with sub-millisecond reconfiguration. Forty-eight Palomar OCSes interconnect the 64 cubes of a 4,096-chip TPU v4 supercomputer. OCSes are &lt;5% of system cost and &lt;3% of system power vs an InfiniBand-based equivalent.
+        <span class="attr">&mdash; Jouppi et al., "TPU v4: An Optically Reconfigurable Supercomputer", ISCA 2023</span>
+    </div>
+
+    <h3>How an OCS works at the bit level</h3>
+    <div class="diagram-grid cols-3">
+        <div class="diagram-panel accent-border">
+            <h4>1. Stay optical</h4>
+            <p>Light from each ICI cable enters the switch as a beam. <em>It is never converted back to electrical inside the switch.</em></p>
+        </div>
+        <div class="diagram-panel y">
+            <h4>2. MEMS mirror</h4>
+            <p>An array of microelectromechanical mirrors steers each beam to any output port. The mirror is the size of a salt grain and tilts in microseconds.</p>
+        </div>
+        <div class="diagram-panel g">
+            <h4>3. Reconfigure</h4>
+            <p>To repoint a beam, the controller tilts the mirror to a new angle; the data path now routes a different cube to a different cube. Reconfiguration in under a millisecond.</p>
+        </div>
+    </div>
+
+    <h3>What this enables that an electrical switch cannot</h3>
+    <ul>
+        <li><strong>Topology per job.</strong> A 2,048-chip slice can be configured as 4&times;4&times;128 or 8&times;16&times;16 by pointing different mirrors. Job 1 finishes &rarr; reconfigure in milliseconds &rarr; job 2 gets a different shape.</li>
+        <li><strong>Healing around faults.</strong> If a TPU board fails its host cube, the OCS routes around it; the pod loses 64 chips, not 1 chip's worth of cube.</li>
+        <li><strong>Twisted torus.</strong> v4 uses a "twisted-3D torus" topology that is impossible with fixed cabling but trivially produced by an OCS &mdash; cuts diameter further with no extra hardware.</li>
+        <li><strong>No serialiser-deserialiser cost.</strong> Optical-electrical-optical (OEO) is the single biggest energy cost in datacenter networking. OCS is photonic end-to-end &mdash; minimal power, minimal heat.</li>
+    </ul>
+
+    <div class="callout">
+        <div class="callout-label">Where else Google uses OCS</div>
+        <p>Google's "Mission Apollo" paper (arXiv:2208.10041, 2022) describes OCS rolled out across the rest of the Jupiter datacenter network. So the Palomar work is a single piece of an organisation-wide reorientation toward optical circuit switching as the right scale-up fabric, not just a TPU thing. v4 is the chip that consumes the technology most aggressively.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-07">
+    <div class="slide-number">07</div>
+    <h2>A 4096-Chip Pod, Logically</h2>
+    <div class="canvas-wrap">
+        <svg viewBox="0 0 720 320" width="720" height="320" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .blk { fill:#161b22; stroke:#21262d; }
+                .cube { fill:rgba(66,133,244,0.18); stroke:#4285F4; }
+                .ocs { fill:rgba(234,67,53,0.18); stroke:#EA4335; }
+                .lbl { fill:#e6edf3; font-family:'Space Grotesk',sans-serif; font-size:13px; text-anchor:middle; }
+                .sublbl { fill:#8b949e; font-family:'JetBrains Mono',monospace; font-size:10px; text-anchor:middle; }
+                .arr { stroke:#4285F4; stroke-width:1; fill:none; }
+            </style>
+            <text x="360" y="22" class="lbl">v4 pod hierarchy — 4 cubes shown, pod has 64</text>
+            <!-- 4 cubes -->
+            <g>
+                <rect class="cube" x="40" y="60" width="140" height="120" rx="6"/>
+                <text class="lbl" x="110" y="90">Cube 0</text>
+                <text class="sublbl" x="110" y="110">4×4×4 = 64 chips</text>
+                <text class="sublbl" x="110" y="125">~17.6 PFLOPS bf16</text>
+                <text class="sublbl" x="110" y="140">2 TiB HBM</text>
+                <text class="sublbl" x="110" y="160">internal 3D torus links</text>
+            </g>
+            <g>
+                <rect class="cube" x="200" y="60" width="140" height="120" rx="6"/>
+                <text class="lbl" x="270" y="90">Cube 1</text>
+                <text class="sublbl" x="270" y="110">64 chips</text>
+            </g>
+            <g>
+                <rect class="cube" x="360" y="60" width="140" height="120" rx="6"/>
+                <text class="lbl" x="430" y="90">Cube 2</text>
+                <text class="sublbl" x="430" y="110">64 chips</text>
+            </g>
+            <g>
+                <rect class="cube" x="520" y="60" width="160" height="120" rx="6"/>
+                <text class="lbl" x="600" y="90">… Cube 63</text>
+                <text class="sublbl" x="600" y="110">64 chips</text>
+            </g>
+            <!-- OCSes -->
+            <rect class="ocs" x="40" y="220" width="640" height="60" rx="6"/>
+            <text class="lbl" x="360" y="245">48 × Palomar OCS — 136-port 3D-MEMS optical switches</text>
+            <text class="sublbl" x="360" y="265">reconfigurable in &lt;1 ms · routes any cube ↔ any cube · twisted torus topology</text>
+            <!-- arrows -->
+            <line class="arr" x1="110" y1="180" x2="110" y2="220"/>
+            <line class="arr" x1="270" y1="180" x2="270" y2="220"/>
+            <line class="arr" x1="430" y1="180" x2="430" y2="220"/>
+            <line class="arr" x1="600" y1="180" x2="600" y2="220"/>
+            <text x="360" y="305" class="sublbl">pod aggregate: ~1.1 ExaFLOPS bf16 · 128 TiB HBM · sub-pod slices reconfigured per job</text>
+        </svg>
+    </div>
+
+    <h3>Allocation policy</h3>
+    <ul>
+        <li>Smallest job: a single cube (64 chips, 4&times;4&times;4 internal torus, no OCS).</li>
+        <li>Common slices: 4&times;4&times;8 = 128, 8&times;8&times;8 = 512, 8&times;8&times;16 = 1024, all the way up to the full pod.</li>
+        <li>The OCS is configured at job start; the chosen cubes appear to software as a single 3D torus, with chip coordinates the user picks.</li>
+        <li>Pod-spanning topology shapes can be twisted (mirror-symmetric) for lower diameter, or non-twisted for simpler debugging.</li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-08">
+    <div class="slide-number">08</div>
+    <h2>v4i &mdash; The Inference Sibling</h2>
+    <p>v4i (Jouppi et al., ISCA 2021, <em>"Ten Lessons From Three Generations Shaped Google's TPUv4i"</em>) is the inference-tuned variant of v4. Same 7&nbsp;nm process, similar uncore, but designed for the cost envelope of fleet inference.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th></th><th>v4 (training)</th><th>v4i (inference)</th></tr></thead>
+            <tbody>
+                <tr><td>Process</td><td>7&nbsp;nm</td><td>7&nbsp;nm</td></tr>
+                <tr><td>TensorCores</td><td>2</td><td><strong>1</strong></td></tr>
+                <tr><td>Per-chip bf16</td><td>275 TFLOPS</td><td>138 TFLOPS</td></tr>
+                <tr><td>HBM</td><td>32 GiB at 1.2 TB/s</td><td>8 GiB HBM2 at ~614 GB/s</td></tr>
+                <tr><td>CMEM</td><td>~128 MiB</td><td>~128 MiB (introduced here first)</td></tr>
+                <tr><td>SparseCore</td><td>Yes</td><td>Yes</td></tr>
+                <tr><td>ICI links</td><td>6</td><td>0 (single chip)</td></tr>
+                <tr><td>Pod</td><td>4096 chips, 3D torus + OCS</td><td>Single chip / PCIe</td></tr>
+                <tr><td>TDP</td><td>~170 W</td><td>~175 W</td></tr>
+                <tr><td>Cooling</td><td>Liquid</td><td>Air</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3>Design choices</h3>
+    <ul>
+        <li><strong>One TensorCore is enough.</strong> Inference batches are smaller; one core fully utilised is better than two cores at half utilisation.</li>
+        <li><strong>HBM2 single stack saves cost.</strong> 8 GiB is enough for most fleet inference models in 2020.</li>
+        <li><strong>No ICI</strong> &mdash; a v4i is a single-chip card. Multi-chip inference uses host-mediated coordination, not the pod fabric.</li>
+        <li><strong>Air-cooled</strong> &mdash; same form factor as v1; drops into existing servers.</li>
+    </ul>
+
+    <p>v4i is the chip that powered the bulk of Google's user-facing inference (Search, YouTube, Ads, Assistant) from 2020 onward. By 2023, with Bard's launch, v4i was also the first inference-side LLM-serving TPU at user scale. It is the direct ancestor of v5e and Trillium &mdash; the e-class lineage.</p>
+</section>
+
+<section class="slide" id="slide-09">
+    <div class="slide-number">09</div>
+    <h2>PaLM &mdash; 6,144 Chips, 50 Days</h2>
+    <p>The headline workload that v4 trained: <strong>PaLM (Pathways Language Model), 540B parameters, April 2022</strong>. PaLM is the first publicly-disclosed example of a frontier-scale LLM trained on TPUs, and the first job that used Google's <em>Pathways</em> single-controller orchestration system to span multiple TPU pods.</p>
+
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr><td><strong>Parameters</strong></td><td>540 billion (dense, decoder-only Transformer)</td></tr>
+                <tr><td><strong>Hardware</strong></td><td>2 v4 pods, 3072 + 1024 = 4096 chips for the bulk; some configurations used 6144 chips</td></tr>
+                <tr><td><strong>Training time</strong></td><td>~50 days wall-clock</td></tr>
+                <tr><td><strong>Tokens trained</strong></td><td>780 billion</td></tr>
+                <tr><td><strong>Hardware utilisation</strong></td><td>~46% Model FLOP Utilisation (MFU) &mdash; among the highest ever reported for an LLM-class run</td></tr>
+                <tr><td><strong>Orchestration</strong></td><td>Pathways single-controller dataflow (Barham, Dean, Ghemawat et al., MLSys 2022)</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p>The Pathways paper is the systems counterpart to the v4 hardware paper. It describes how a <em>single Python program on a single client</em> dispatches work to thousands of TPUs across multiple pods, with asynchronous compilation and dataflow graphs that span the cluster.</p>
+
+    <div class="callout">
+        <div class="callout-label">A milestone hidden in the citation</div>
+        <p>Hennessy and Patterson's CACM 2019 Turing lecture predicted that "domain-specific architectures" would deliver 50&times;+ improvements over general-purpose CPUs; PaLM is the existence proof at frontier-LLM scale. 540B parameters trained for 6,144-chip-equivalent &times; 50 days is on the order of 10<sup>23</sup> bf16 FLOPs; that workload on a CPU cluster would be impossible.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-10">
+    <div class="slide-number">10</div>
+    <h2>Resiliency at Scale</h2>
+    <p>USENIX NSDI 2024 has a Google paper, <em>"Resiliency at Scale: Managing Google's TPUv4 ML Supercomputer"</em>, that's worth reading on its own as a systems-engineering document.</p>
+
+    <h3>The problem</h3>
+    <ul>
+        <li>4096-chip pods. Mean Time Between Failures of any individual chip is high &mdash; but with thousands of them, <em>some</em> chip fails every few days.</li>
+        <li>An LLM training job runs for weeks. A 24-hour failure rate is 1&ndash;5% &mdash; expect O(10) chip failures per training run.</li>
+        <li>Naive checkpoint-and-restart loses hours of progress per failure. Unacceptable at this scale.</li>
+    </ul>
+
+    <h3>The v4 system's answer</h3>
+    <ul>
+        <li><strong>OCS rerouting.</strong> When a chip dies, the OCS swaps in a hot-spare cube within milliseconds. The training job pauses for one heartbeat and resumes.</li>
+        <li><strong>Frequent async checkpointing.</strong> Pathways's checkpointing layer can write state to disaggregated storage every few minutes without stalling the training step.</li>
+        <li><strong>In-flight gradient skipping.</strong> If a step's all-reduce is corrupted by a transient ICI error, the affected gradient is dropped and the step retried, rather than aborting the job.</li>
+        <li><strong>Hardware ECC + parity</strong> on every memory level (CMEM, VMEM, HBM, ICI), with corrected-error counters reported up to the orchestration layer.</li>
+    </ul>
+
+    <p>The result is "five-nines" effective uptime on multi-week training jobs at 4096-chip scale &mdash; a number that has no real precedent in scientific computing, where chip-scale supercomputers like Summit / Frontier checkpoint hourly.</p>
+</section>
+
+<section class="slide" id="slide-11">
+    <div class="slide-number">11</div>
+    <h2>v4 Numbers In One Page</h2>
+    <div class="diagram-grid cols-3">
+        <div class="diagram-panel accent-border">
+            <h4>Per chip</h4>
+            <ul>
+                <li>275 TFLOPS bf16</li>
+                <li>32 GiB HBM2</li>
+                <li>1.2 TB/s HBM BW</li>
+                <li>~128 MiB CMEM</li>
+                <li>1 SparseCore</li>
+                <li>6 ICI links @ 50 GB/s ea</li>
+                <li>~170 W</li>
+            </ul>
+        </div>
+        <div class="diagram-panel y">
+            <h4>Per pod</h4>
+            <ul>
+                <li>4096 chips</li>
+                <li>~1.1 ExaFLOPS bf16</li>
+                <li>128 TiB aggregate HBM</li>
+                <li>3D torus + 48 Palomar OCS</li>
+                <li>Reconfigurable slices: 64 to 4096 chips</li>
+                <li>Twisted-torus topology option</li>
+            </ul>
+        </div>
+        <div class="diagram-panel g">
+            <h4>Pod environmental</h4>
+            <ul>
+                <li>Liquid cooled</li>
+                <li>Pod power ~700&nbsp;kW</li>
+                <li>Pod footprint ~12&ndash;16 racks</li>
+                <li>Hot-spare cubes for fault recovery</li>
+                <li>OCS &lt;5% of system cost, &lt;3% of system power</li>
+            </ul>
+        </div>
+    </div>
+
+    <h3>The v4i companion</h3>
+    <ul>
+        <li>Same 7&nbsp;nm process; one TensorCore; 138 TFLOPS bf16; 8 GiB HBM2; 175 W; air-cooled; PCIe.</li>
+        <li>Drops into existing inference servers; single-chip; no ICI.</li>
+        <li>Powers Google's bulk inference fleet from 2020 onward, including the first generation of Bard.</li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-12">
+    <div class="slide-number">12</div>
+    <h2>Cheat Sheet</h2>
+    <ul>
+        <li><strong>v4 (deployed 2020, announced 2021, paper ISCA 2023):</strong> 7 nm, 2 TensorCores with 4 MXUs each, 275 TFLOPS bf16, 32 GiB HBM, ~170 W, liquid-cooled.</li>
+        <li><strong>CMEM</strong> &mdash; ~128 MiB on-die SRAM cache between VMEM and HBM. First TPU memory level with cache-like behaviour.</li>
+        <li><strong>SparseCore</strong> &mdash; embedding-lookup accelerator. 5&ndash;7&times; speedup on DLRM-class workloads. Now in every TPU since.</li>
+        <li><strong>6 ICI links per chip</strong> &mdash; enables 3D torus.</li>
+        <li><strong>Palomar OCS</strong> &mdash; 136-port 3D-MEMS optical circuit switch. 48 OCSes per pod. &lt;5% of system cost, &lt;3% of power. Reconfigurable in &lt;1 ms.</li>
+        <li><strong>4096-chip pod</strong>: 64 cubes of 64 chips each, connected via OCS. Sub-pod slices reconfigurable per job. Twisted-torus topology.</li>
+        <li><strong>v4i (ISCA 2021)</strong>: inference variant. 1 TensorCore, 138 TFLOPS, 8 GiB HBM2, air-cooled, PCIe. CMEM debuted here.</li>
+        <li><strong>PaLM 540B</strong>: trained on 6,144-chip v4 over 50 days using <em>Pathways</em> orchestration. The first frontier-scale LLM training at TPU scale.</li>
+        <li><strong>Resilience</strong> at 4096-chip scale: OCS hot-spare rerouting, frequent async checkpointing, ECC at every memory level.</li>
+    </ul>
+
+    <div class="callout">
+        <div class="callout-label">Read next</div>
+        <p>Deck <strong>07</strong> covers the v5 split into e-class and p-class chips. Deck <strong>10 &mdash; ICI &amp; OCS</strong> takes Palomar apart in much more detail.</p>
+    </div>
+</section>
+
+<footer class="footer">
+    <p>Part of the <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Google_TPUs">Google TPUs</a> series. Sources: Jouppi et al., "TPU v4: An Optically Reconfigurable Supercomputer for ML with Hardware Support for Embeddings", ISCA 2023 (arXiv:2304.01433); Jouppi et al., "Ten Lessons From Three Generations Shaped Google's TPUv4i", ISCA 2021; Barham, Dean, Ghemawat et al., "Pathways", MLSys 2022 (arXiv:2203.12533); USENIX NSDI 2024 "Resiliency at Scale: Managing Google's TPUv4 ML Supercomputer"; "Mission Apollo &mdash; OCS at Datacenter Scale", arXiv:2208.10041.</p>
+</footer>
+
+</body>
+</html>
