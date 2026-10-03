@@ -141,7 +141,7 @@
         </div>
     </div>
 
-    <p>The CACM 2023 paper opens with the statement that v4 is "approximately 2.1&times; the per-chip performance of v3 and 2.7&times; better perf/W". The pod-level numbers are much larger because the 4096-chip pod is 4&times; the 1024-chip v3 pod.</p>
+    <p>The ISCA 2023 paper's abstract states that "TPU v4 outperforms TPU v3 by 2.1x and improves performance/Watt by 2.7x". The pod-level numbers are much larger because the 4096-chip pod is 4&times; the 1024-chip v3 pod.</p>
 </section>
 
 <section class="slide" id="slide-02">
@@ -151,7 +151,7 @@
         <table>
             <tbody>
                 <tr><td><strong>Process</strong></td><td>TSMC 7&nbsp;nm</td></tr>
-                <tr><td><strong>Die size</strong></td><td>&lt;400 mm&sup2;</td></tr>
+                <tr><td><strong>Die size</strong></td><td>&lt;600 mm&sup2; (22 B transistors)</td></tr>
                 <tr><td><strong>TensorCores per chip</strong></td><td>2</td></tr>
                 <tr><td><strong>MXUs per TensorCore</strong></td><td>4 (8 per chip total)</td></tr>
                 <tr><td><strong>MXU dim</strong></td><td>128&times;128 bf16</td></tr>
@@ -160,12 +160,12 @@
                 <tr><td><strong>Clock</strong></td><td>~1050 MHz</td></tr>
                 <tr><td><strong>HBM</strong></td><td>32 GiB HBM2 at 1.2 TB/s</td></tr>
                 <tr><td><strong>CMEM</strong></td><td>~128 MiB on-die (shared between cores)</td></tr>
-                <tr><td><strong>SparseCore</strong></td><td>One per chip; embedding-lookup accelerator</td></tr>
+                <tr><td><strong>SparseCore</strong></td><td>Four per chip; embedding-lookup accelerators</td></tr>
                 <tr><td><strong>ICI links per chip</strong></td><td>6 (enables 3D torus)</td></tr>
                 <tr><td><strong>Per-link ICI BW</strong></td><td>~50 GB/s</td></tr>
                 <tr><td><strong>TDP</strong></td><td>~170 W</td></tr>
                 <tr><td><strong>Cooling</strong></td><td>Liquid (cold-plate)</td></tr>
-                <tr><td><strong>Pod size</strong></td><td>4,096 chips (3D torus, 4&times;4&times;4 of 8&times;8&times;8 cubes)</td></tr>
+                <tr><td><strong>Pod size</strong></td><td>4,096 chips (3D torus, 64 cubes of 4&times;4&times;4)</td></tr>
                 <tr><td><strong>Pod aggregate</strong></td><td>~1.1 ExaFLOPS bf16</td></tr>
             </tbody>
         </table>
@@ -220,7 +220,7 @@
         <li>Feed the result into a dense MLP (which is matmul, fine for the MXU).</li>
     </ol>
 
-    <p>Steps 1&ndash;3 are scatter-gather + reduction, with random access patterns and small sub-vector reductions. The MXU is useless for them; the vector unit runs them but is bandwidth-bound. The CACM v4 paper says these workloads spent ~50% of training time in embedding ops on v3.</p>
+    <p>Steps 1&ndash;3 are scatter-gather + reduction, with random access patterns and small sub-vector reductions. The MXU is useless for them; the vector unit runs them but is bandwidth-bound. The v4 paper (ISCA 2023) says these workloads spent ~50% of training time in embedding ops on v3.</p>
 
     <h3>SparseCore's hardware</h3>
     <div class="diagram-grid cols-2">
@@ -283,7 +283,7 @@
 
     <div class="quote">
         Each Palomar OCS is a 136-port (128 + 8 spares) reconfigurable optical switch using 3D-MEMS mirrors, with sub-millisecond reconfiguration. Forty-eight Palomar OCSes interconnect the 64 cubes of a 4,096-chip TPU v4 supercomputer. OCSes are &lt;5% of system cost and &lt;3% of system power vs an InfiniBand-based equivalent.
-        <span class="attr">&mdash; Jouppi et al., "TPU v4: An Optically Reconfigurable Supercomputer", ISCA 2023</span>
+        <span class="attr">&mdash; paraphrasing Jouppi et al., "TPU v4: An Optically Reconfigurable Supercomputer", ISCA 2023 (abstract and &sect;2.2)</span>
     </div>
 
     <h3>How an OCS works at the bit level</h3>
@@ -419,7 +419,7 @@
         <table>
             <tbody>
                 <tr><td><strong>Parameters</strong></td><td>540 billion (dense, decoder-only Transformer)</td></tr>
-                <tr><td><strong>Hardware</strong></td><td>2 v4 pods, 3072 + 1024 = 4096 chips for the bulk; some configurations used 6144 chips</td></tr>
+                <tr><td><strong>Hardware</strong></td><td>2 v4 pods &times; 3,072 chips = 6,144 chips</td></tr>
                 <tr><td><strong>Training time</strong></td><td>~50 days wall-clock</td></tr>
                 <tr><td><strong>Tokens trained</strong></td><td>780 billion</td></tr>
                 <tr><td><strong>Hardware utilisation</strong></td><td>~46% Model FLOP Utilisation (MFU) &mdash; among the highest ever reported for an LLM-class run</td></tr>
@@ -432,7 +432,7 @@
 
     <div class="callout">
         <div class="callout-label">A milestone hidden in the citation</div>
-        <p>Hennessy and Patterson's CACM 2019 Turing lecture predicted that "domain-specific architectures" would deliver 50&times;+ improvements over general-purpose CPUs; PaLM is the existence proof at frontier-LLM scale. 540B parameters trained for 6,144-chip-equivalent &times; 50 days is on the order of 10<sup>23</sup> bf16 FLOPs; that workload on a CPU cluster would be impossible.</p>
+        <p>Hennessy and Patterson's CACM 2019 Turing lecture predicted that "domain-specific architectures" would deliver 50&times;+ improvements over general-purpose CPUs; PaLM is the existence proof at frontier-LLM scale. 540B parameters trained for 6,144-chip-equivalent &times; 50 days is ~6 &times; 540&nbsp;B &times; 780&nbsp;B &asymp; 2.5 &times; 10<sup>24</sup> FLOPs; that workload on a CPU cluster would be impossible.</p>
     </div>
 </section>
 
@@ -470,7 +470,7 @@
                 <li>32 GiB HBM2</li>
                 <li>1.2 TB/s HBM BW</li>
                 <li>~128 MiB CMEM</li>
-                <li>1 SparseCore</li>
+                <li>4 SparseCores</li>
                 <li>6 ICI links @ 50 GB/s ea</li>
                 <li>~170 W</li>
             </ul>
@@ -491,7 +491,7 @@
             <ul>
                 <li>Liquid cooled</li>
                 <li>Pod power ~700&nbsp;kW</li>
-                <li>Pod footprint ~12&ndash;16 racks</li>
+                <li>Pod footprint 64 racks (one 4&times;4&times;4 cube per rack)</li>
                 <li>Hot-spare cubes for fault recovery</li>
                 <li>OCS &lt;5% of system cost, &lt;3% of system power</li>
             </ul>
