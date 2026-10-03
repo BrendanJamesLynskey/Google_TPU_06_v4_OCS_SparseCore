@@ -184,7 +184,7 @@
             <h4>The hierarchy on v4</h4>
             <ul>
                 <li><strong>Registers / accumulators</strong> &mdash; per-PE.</li>
-                <li><strong>VMEM</strong> &mdash; ~32 MiB per TensorCore. Software-managed.</li>
+                <li><strong>VMEM</strong> &mdash; 32 MiB per chip (~16 MiB per TensorCore). Software-managed.</li>
                 <li><strong>CMEM</strong> &mdash; ~128 MiB shared across the chip. XLA-managed residency.</li>
                 <li><strong>HBM</strong> &mdash; 32 GiB at 1.2 TB/s.</li>
                 <li><strong>Remote HBM</strong> &mdash; via ICI from a neighbouring chip (~50 GB/s per link).</li>
